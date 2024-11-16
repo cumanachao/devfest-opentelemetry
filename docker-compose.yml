@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_MULTIPLE_DATABASES: devfest_opentelemetry
+    volumes:
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - 5432:5432
+
+  app1:
+    build:
+      context: ./app1
+      dockerfile: Dockerfile
+    volumes:
+      - $PWD/app1:/app1
+      - /bundle
+    ports:
+      - 3000:3000
+    depends_on:
+      - db
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+  app2:
+    build:
+      context: ./app2
+      dockerfile: Dockerfile
+    volumes:
+      - $PWD/app2:/app2
+      - /bundle
+    ports:
+      - 3001:3001
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      PORT: 3001
+    depends_on:
+      - db
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLE: true
+    ports:
+      - 16686:16686
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.107.0
+    volumes:
+      - ./otel.yml:/etc/otel.yml
+    command: ["--config=/etc/otel.yml"]
+    environment:
+      - OTEL_LOG_LEVEL=debug
+    ports:
+      - 4318:4318 # OTLP http receiver
